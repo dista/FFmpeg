@@ -36,6 +36,7 @@ typedef struct TCPContext {
     const AVClass *class;
     int fd;
     int listen;
+    int dynamic_accel;
     int open_timeout;
     int rw_timeout;
     int listen_timeout;
@@ -48,6 +49,7 @@ typedef struct TCPContext {
 #define E AV_OPT_FLAG_ENCODING_PARAM
 static const AVOption options[] = {
     { "listen",          "Listen for incoming connections",  OFFSET(listen),         AV_OPT_TYPE_INT, { .i64 = 0 },     0,       2,       .flags = D|E },
+    { "dynamic_accel",   "Should go dynamic accel",  OFFSET(dynamic_accel),         AV_OPT_TYPE_INT, { .i64 = 0 },     0,       1,       .flags = D|E },
     { "timeout",     "set timeout (in microseconds) of socket I/O operations", OFFSET(rw_timeout),     AV_OPT_TYPE_INT, { .i64 = -1 },         -1, INT_MAX, .flags = D|E },
     { "listen_timeout",  "Connection awaiting timeout (in milliseconds)",      OFFSET(listen_timeout), AV_OPT_TYPE_INT, { .i64 = -1 },         -1, INT_MAX, .flags = D|E },
     { "send_buffer_size", "Socket send buffer size (in bytes)",                OFFSET(send_buffer_size), AV_OPT_TYPE_INT, { .i64 = -1 },         -1, INT_MAX, .flags = D|E },
@@ -73,6 +75,8 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     int ret;
     char hostname[1024],proto[1024],path[1024];
     char portstr[10];
+    uint32_t so_mark = 1;
+    uint32_t ip_tos = 64;
     s->open_timeout = 5000000;
 
     av_url_split(proto, sizeof(proto), NULL, 0, hostname, sizeof(hostname),
@@ -138,6 +142,16 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     if (fd < 0) {
         ret = ff_neterrno();
         goto fail;
+    }
+
+    if (s->dynamic_accel == 1) {
+        if (setsockopt(fd, SOL_SOCKET, SO_MARK, &so_mark, sizeof(so_mark)) == -1) {
+            av_log(h, AV_LOG_WARNING, "Failed to set so_mark: %d\n", ff_neterrno());
+        }
+
+        if (setsockopt(fd, IPPROTO_IP, IP_TOS, &ip_tos, sizeof(ip_tos)) == -1) {
+            av_log(h, AV_LOG_WARNING, "Failed to set ip_tos: %d\n", ff_neterrno());
+        }
     }
 
     /* Set the socket's send or receive buffer sizes, if specified.
