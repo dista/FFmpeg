@@ -32,6 +32,11 @@
 #include <poll.h>
 #endif
 
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+
+
 typedef struct TCPContext {
     const AVClass *class;
     int fd;
@@ -42,6 +47,7 @@ typedef struct TCPContext {
     int listen_timeout;
     int recv_buffer_size;
     int send_buffer_size;
+    char* tcp_congestion;
 } TCPContext;
 
 #define OFFSET(x) offsetof(TCPContext, x)
@@ -54,6 +60,7 @@ static const AVOption options[] = {
     { "listen_timeout",  "Connection awaiting timeout (in milliseconds)",      OFFSET(listen_timeout), AV_OPT_TYPE_INT, { .i64 = -1 },         -1, INT_MAX, .flags = D|E },
     { "send_buffer_size", "Socket send buffer size (in bytes)",                OFFSET(send_buffer_size), AV_OPT_TYPE_INT, { .i64 = -1 },         -1, INT_MAX, .flags = D|E },
     { "recv_buffer_size", "Socket receive buffer size (in bytes)",             OFFSET(recv_buffer_size), AV_OPT_TYPE_INT, { .i64 = -1 },         -1, INT_MAX, .flags = D|E },
+    {"tcp_congestion",    "tcp congestion control algorithm",                  OFFSET(tcp_congestion), AV_OPT_TYPE_STRING, {.str=""},      CHAR_MIN, CHAR_MAX, .flags = D|E },
     { NULL }
 };
 
@@ -78,6 +85,7 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     uint32_t so_mark = 1;
     uint32_t ip_tos = 64;
     s->open_timeout = 5000000;
+    int optlen = -1;
 
     av_url_split(proto, sizeof(proto), NULL, 0, hostname, sizeof(hostname),
         &port, path, sizeof(path), uri);
@@ -151,6 +159,14 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
 
         if (setsockopt(fd, IPPROTO_IP, IP_TOS, &ip_tos, sizeof(ip_tos)) == -1) {
             av_log(h, AV_LOG_WARNING, "Failed to set ip_tos: %d\n", ff_neterrno());
+        }
+    }
+
+    optlen = strlen(s->tcp_congestion);
+
+    if (optlen != 0 ) {
+        if (setsockopt(fd, IPPROTO_TCP, TCP_CONGESTION, s->tcp_congestion, optlen) < 0) {
+            av_log(h, AV_LOG_WARNING, "Failed to set TCP_CONGESTION: %d\n", ff_neterrno());
         }
     }
 
