@@ -60,7 +60,7 @@ static const AVOption options[] = {
     { "listen_timeout",  "Connection awaiting timeout (in milliseconds)",      OFFSET(listen_timeout), AV_OPT_TYPE_INT, { .i64 = -1 },         -1, INT_MAX, .flags = D|E },
     { "send_buffer_size", "Socket send buffer size (in bytes)",                OFFSET(send_buffer_size), AV_OPT_TYPE_INT, { .i64 = -1 },         -1, INT_MAX, .flags = D|E },
     { "recv_buffer_size", "Socket receive buffer size (in bytes)",             OFFSET(recv_buffer_size), AV_OPT_TYPE_INT, { .i64 = -1 },         -1, INT_MAX, .flags = D|E },
-    {"tcp_congestion",    "tcp congestion control algorithm",                  OFFSET(tcp_congestion), AV_OPT_TYPE_STRING, {.str=""},      CHAR_MIN, CHAR_MAX, .flags = D|E },
+    { "tcp_congestion",    "tcp congestion control algorithm",                  OFFSET(tcp_congestion), AV_OPT_TYPE_STRING, {.str=""},      CHAR_MIN, CHAR_MAX, .flags = D|E },
     { NULL }
 };
 
