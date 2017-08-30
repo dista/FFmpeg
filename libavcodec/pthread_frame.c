@@ -570,10 +570,11 @@ void ff_thread_report_progress(ThreadFrame *f, int n, int field)
 
     p = f->owner[field]->internal->thread_ctx;
 
-    pthread_mutex_lock(&p->progress_mutex);
     if (atomic_load_explicit(&p->debug_threads, memory_order_relaxed))
         av_log(f->owner[field], AV_LOG_DEBUG,
                "%p finished %d field %d\n", progress, n, field);
+
+    pthread_mutex_lock(&p->progress_mutex);
 
     atomic_store_explicit(&progress[field], n, memory_order_release);
 
@@ -592,10 +593,11 @@ void ff_thread_await_progress(ThreadFrame *f, int n, int field)
 
     p = f->owner[field]->internal->thread_ctx;
 
-    pthread_mutex_lock(&p->progress_mutex);
     if (atomic_load_explicit(&p->debug_threads, memory_order_relaxed))
         av_log(f->owner[field], AV_LOG_DEBUG,
                "thread awaiting %d field %d from %p\n", n, field, progress);
+
+    pthread_mutex_lock(&p->progress_mutex);
     while (atomic_load_explicit(&progress[field], memory_order_relaxed) < n)
         pthread_cond_wait(&p->progress_cond, &p->progress_mutex);
     pthread_mutex_unlock(&p->progress_mutex);
@@ -737,8 +739,10 @@ int ff_frame_thread_init(AVCodecContext *avctx)
 
     if (!thread_count) {
         int nb_cpus = av_cpu_count();
+#if FF_API_DEBUG_MV
         if ((avctx->debug & (FF_DEBUG_VIS_QP | FF_DEBUG_VIS_MB_TYPE)) || avctx->debug_mv)
             nb_cpus = 1;
+#endif
         // use number of cores + 1 as thread count if there is more than one
         if (nb_cpus > 1)
             thread_count = avctx->thread_count = FFMIN(nb_cpus + 1, MAX_AUTO_THREADS);

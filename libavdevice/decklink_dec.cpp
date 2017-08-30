@@ -1,6 +1,7 @@
 /*
  * Blackmagic DeckLink input
  * Copyright (c) 2013-2014 Luca Barbato, Deti Fliegl
+ * Copyright (c) 2017 Akamai Technologies, Inc.
  *
  * This file is part of FFmpeg.
  *
@@ -187,10 +188,12 @@ static uint8_t* teletext_data_unit_from_vanc_data(uint8_t *src, uint8_t *tgt, in
 
 static void avpacket_queue_init(AVFormatContext *avctx, AVPacketQueue *q)
 {
+    struct decklink_cctx *ctx = (struct decklink_cctx *)avctx->priv_data;
     memset(q, 0, sizeof(AVPacketQueue));
     pthread_mutex_init(&q->mutex, NULL);
     pthread_cond_init(&q->cond, NULL);
     q->avctx = avctx;
+    q->max_q_size = ctx->queue_size;
 }
 
 static void avpacket_queue_flush(AVPacketQueue *q)
@@ -230,8 +233,8 @@ static int avpacket_queue_put(AVPacketQueue *q, AVPacket *pkt)
 {
     AVPacketList *pkt1;
 
-    // Drop Packet if queue size is > 1GB
-    if (avpacket_queue_size(q) >  1024 * 1024 * 1024 ) {
+    // Drop Packet if queue size is > maximum queue size
+    if (avpacket_queue_size(q) > (uint64_t)q->max_q_size) {
         av_log(q->avctx, AV_LOG_WARNING,  "Decklink input buffer overrun!\n");
         return -1;
     }
@@ -731,6 +734,19 @@ av_cold int ff_decklink_read_header(AVFormatContext *avctx)
         st->codecpar->bit_rate    = av_rescale(ctx->bmd_width * ctx->bmd_height * 16, st->time_base.den, st->time_base.num);
     }
 
+    switch (ctx->bmd_field_dominance) {
+    case bmdUpperFieldFirst:
+        st->codecpar->field_order = AV_FIELD_TT;
+        break;
+    case bmdLowerFieldFirst:
+        st->codecpar->field_order = AV_FIELD_BB;
+        break;
+    case bmdProgressiveFrame:
+    case bmdProgressiveSegmentedFrame:
+        st->codecpar->field_order = AV_FIELD_PROGRESSIVE;
+        break;
+    }
+
     avpriv_set_pts_info(st, 64, 1, 1000000);  /* 64 bits pts in us */
 
     ctx->video_st=st;
@@ -788,15 +804,8 @@ int ff_decklink_read_packet(AVFormatContext *avctx, AVPacket *pkt)
 {
     struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
     struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
-    AVFrame *frame = ctx->video_st->codec->coded_frame;
 
     avpacket_queue_get(&ctx->queue, pkt, 1);
-    if (frame && (ctx->bmd_field_dominance == bmdUpperFieldFirst || ctx->bmd_field_dominance == bmdLowerFieldFirst)) {
-        frame->interlaced_frame = 1;
-        if (ctx->bmd_field_dominance == bmdUpperFieldFirst) {
-            frame->top_field_first = 1;
-        }
-    }
 
     return 0;
 }
